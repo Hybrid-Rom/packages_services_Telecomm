@@ -241,13 +241,17 @@ final class ConnectionServiceWrapper extends ServiceBinder<IConnectionService> {
                                 (ParcelableConference) args.arg2;
 
                         // need to create a new Call
+                        PhoneAccountHandle phAcc = null;
+                        if (parcelableConference != null) {
+                            phAcc = parcelableConference.getPhoneAccount();
+                        }
                         Call conferenceCall = mCallsManager.createConferenceCall(
-                                null, parcelableConference);
+                                phAcc, parcelableConference);
                         mCallIdMapper.addCall(conferenceCall, id);
                         conferenceCall.setConnectionService(ConnectionServiceWrapper.this);
 
-                        Log.d(this, "adding children to conference %s",
-                                parcelableConference.getConnectionIds());
+                        Log.d(this, "adding children to conference %s phAcc %s",
+                                parcelableConference.getConnectionIds(), phAcc);
                         for (String callId : parcelableConference.getConnectionIds()) {
                             Call childCall = mCallIdMapper.getCall(callId);
                             Log.d(this, "found child: %s", callId);
@@ -267,7 +271,7 @@ final class ConnectionServiceWrapper extends ServiceBinder<IConnectionService> {
                 case MSG_REMOVE_CALL: {
                     call = mCallIdMapper.getCall(msg.obj);
                     if (call != null) {
-                        if (call.isActive()) {
+                        if (call.isAlive()) { //Any Call that is alive
                             mCallsManager.markCallAsDisconnected(
                                     call, new DisconnectCause(DisconnectCause.REMOTE));
                         } else {
@@ -466,7 +470,7 @@ final class ConnectionServiceWrapper extends ServiceBinder<IConnectionService> {
         @Override
         public void setVideoProvider(String callId, IVideoProvider videoProvider) {
             logIncoming("setVideoProvider %s", callId);
-            if (mCallIdMapper.isValidCallId(callId)) {
+            if (mCallIdMapper.isValidCallId(callId) || mCallIdMapper.isValidConferenceId(callId)) {
                 SomeArgs args = SomeArgs.obtain();
                 args.arg1 = callId;
                 args.arg2 = videoProvider;
@@ -586,7 +590,7 @@ final class ConnectionServiceWrapper extends ServiceBinder<IConnectionService> {
         @Override
         public void setVideoState(String callId, int videoState) {
             logIncoming("setVideoState %s %d", callId, videoState);
-            if (mCallIdMapper.isValidCallId(callId)) {
+            if (mCallIdMapper.isValidCallId(callId) || mCallIdMapper.isValidConferenceId(callId)) {
                 mHandler.obtainMessage(MSG_SET_VIDEO_STATE, videoState, 0, callId).sendToTarget();
             }
         }
@@ -998,6 +1002,17 @@ final class ConnectionServiceWrapper extends ServiceBinder<IConnectionService> {
                 mServiceInterface.splitFromConference(callId);
             } catch (RemoteException ignored) {
             }
+        }
+    }
+
+    void addParticipantWithConference(Call call, String receipant) {
+        final String callId = mCallIdMapper.getCallId(call);
+            if (isServiceValid("addParticipantWithConference")) {
+                try {
+                    logOutgoing("addParticipantWithConference %s, %s", receipant, callId);
+                    mServiceInterface.addParticipantWithConference(callId, receipant);
+                } catch (RemoteException ignored) {
+                }
         }
     }
 
